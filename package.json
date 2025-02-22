@@ -51,6 +51,7 @@
         "@types/jquery": "^3.5.14",
         "@types/lodash": "^4.14.182",
         "@types/redux": "^3.6.31",
+        "@types/webextension-polyfill": "^0.12.1",
         "@types/webpack-bundle-analyzer": "^4.4.1",
         "@types/zip-webpack-plugin": "^3.0.3",
         "@typescript-eslint/eslint-plugin": "^5.25.0",
