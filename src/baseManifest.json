@@ -19,8 +19,7 @@
         }
     ],
     "background": {
-        "service_worker": "background/background.js",
-        "type": "module"
+        "service_worker": "background/background.js"
     },
     "minimum_chrome_version": "92",
     "permissions": ["activeTab", "scripting", "contextMenus", "storage", "unlimitedStorage"],

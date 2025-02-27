@@ -1,35 +1,71 @@
-setTimeout(async () => {
-    type Severity = 'error' | 'warning';
-    type ErrorRange = { start: number; end: number; severity: Severity };
+import { replaceSelectedText } from './text-correction-utils';
 
-    // Function to send text to the background script for correction
-    async function sendTextForCorrection(text: string): Promise<ErrorRange[]> {
-        return Promise.resolve([]);
-    }
+type Severity = 'error' | 'warning';
+type ErrorRange = { start: number; end: number; severity: Severity };
 
-    let overlay = document.getElementById('overlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'overlay';
-        overlay.style.position = 'absolute';
-        overlay.style.top = '0';
-        overlay.style.zIndex = '9999';
-        document.body.appendChild(overlay);
-    }
+const INPUT_SELECTOR = "textarea, input[type='text'], [contenteditable]";
 
-    const elements = document.querySelectorAll("textarea, input[type='text'], [contenteditable]");
+const injectProductIcon = () => {
+    // Add Product Icon (Green Square Control Panel)
+    const productIcon = document.createElement('div');
+    productIcon.className = 'product-icon';
+    document.body.appendChild(productIcon);
 
-    elements.forEach((element) => {
-        // Immediate processing on text input (including deletion)
-        element.addEventListener('input', async () => {
-            const text = element.textContent || (element as HTMLInputElement).value || '';
-            const errors = await sendTextForCorrection(text);
-            highlightErrors(errors);
+    // Show control panel on click or hover
+    productIcon.addEventListener('click', () => {
+        showControlPanel(productIcon);
+    });
+
+    productIcon.addEventListener('mouseover', () => {
+        showControlPanel(productIcon);
+    });
+
+    function showControlPanel(icon: HTMLElement) {
+        const controlPanel = document.createElement('div');
+        controlPanel.className = 'control-panel';
+        controlPanel.innerHTML = `
+            <div class="control-panel-header">
+                <span>Control Panel</span>
+                <button class="close-control-panel">&times;</button>
+            </div>
+            <div class="control-panel-body">
+                <p>This is the control panel. You can add more controls here.</p>
+            </div>
+        `;
+
+        document.body.appendChild(controlPanel);
+
+        // Position control panel
+        const rect = icon.getBoundingClientRect();
+        controlPanel.style.top = `${rect.bottom + 10}px`;
+        controlPanel.style.left = `${rect.left}px`;
+
+        // Close control panel on button click
+        const closeButton = controlPanel.querySelector('.close-control-panel');
+        closeButton?.addEventListener('click', () => {
+            controlPanel.remove();
         });
 
-        // Trigger re-validation when text is deleted or edited
-        element.addEventListener('blur', async () => {
-            const text = element.textContent || (element as HTMLInputElement).value || '';
+        // Remove control panel when mouse leaves
+        icon.addEventListener('mouseleave', () => {
+            controlPanel.style.opacity = '0';
+            setTimeout(() => controlPanel.remove(), 300); // Fade-out animation
+        });
+    }
+};
+
+// Function to send text to the background script for correction
+async function sendTextForCorrection(text: string): Promise<ErrorRange[]> {
+    return Promise.resolve([]);
+}
+
+setTimeout(async () => {
+    const overlay = getOverlayContainer();
+    const inputs = document.querySelectorAll(INPUT_SELECTOR);
+
+    inputs.forEach((input) => {
+        ['input', 'blur'].forEach(async (_event) => {
+            const text = input.textContent || (input as HTMLInputElement).value || '';
             const errors = await sendTextForCorrection(text);
             highlightErrors(errors);
         });
@@ -73,6 +109,7 @@ setTimeout(async () => {
                         highlightBox.style.height = `${rect.height}px`;
                         highlightBox.style.backgroundColor = 'transparent'; // Transparent by default
                         highlightBox.style.borderBottom = `2px solid ${getUnderlineColor(severity)}`; // Add a colored underline
+                        // @ts-ignore
                         overlay.appendChild(highlightBox);
 
                         // Adding click event to show tooltip
@@ -96,16 +133,6 @@ setTimeout(async () => {
                 currentPosition += nodeLength;
             });
         });
-    }
-
-    // Function to get underline color based on severity
-    function getUnderlineColor(severity: Severity): string {
-        if (severity === 'error') {
-            return '#e74c3c'; // Red for errors
-        } else if (severity === 'warning') {
-            return '#f39c12'; // Orange for warnings
-        }
-        return '#00FF00'; // Green for corrections (optional)
     }
 
     function getTextNodesInEditor(element: Element): Node[] {
@@ -167,157 +194,6 @@ setTimeout(async () => {
         tooltip.style.visibility = 'visible';
     }
 
-    // Function to replace the selected text with the suggestion
-    function replaceSelectedText(range: Range, suggestion: string) {
-        const selection = window.getSelection();
-        if (selection) {
-            selection.removeAllRanges();
-            selection.addRange(range);
-            document.execCommand('insertText', false, suggestion); // Replace the selected text
-        }
-    }
-
-    // Add styles for animation and tooltips
-    const style = document.createElement('style');
-    style.innerHTML = `
-        .highlight-box {
-            position: absolute;
-            background: transparent;
-            cursor: pointer;
-            transition: background 0.2s ease-in-out;
-        }
-
-        .highlight-box:hover {
-            background: rgba(231, 76, 60, 0.1); /* Light red for errors */
-        }
-
-        .popup {
-            height: fit-content;
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 300px;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
-            padding: 1rem;
-            margin-bottom: 10px;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s, visibility 0.3s;
-            z-index: 1000;
-        }
-
-        .popup::before {
-            content: "";
-            position: absolute;
-            bottom: -10px;
-            left: 50%;
-            transform: translateX(-50%);
-            border-left: 10px solid transparent;
-            border-right: 10px solid transparent;
-            border-top: 10px solid white;
-        }
-
-        .popup-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
-        }
-
-        .error-type {
-            font-weight: bold;
-            color: #e74c3c;
-        }
-
-        .close-btn {
-            background: none;
-            border: none;
-            font-size: 1.2rem;
-            cursor: pointer;
-            color: #7f8c8d;
-        }
-
-        .explanation {
-            font-size: 0.9rem;
-            margin-bottom: 0.5rem;
-            color: #333; /* Darker text for better contrast */
-        }
-
-        .suggestion {
-            display: flex;
-            align-items: center;
-        }
-
-        .suggestion-label {
-            font-size: 0.9rem;
-            font-weight: bold;
-            margin-right: 0.5rem;
-            color: #333; /* Darker text for better contrast */
-        }
-
-        .suggestion-btn {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            padding: 0.3rem 0.8rem;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-
-        .suggestion-btn:hover {
-            background-color: #2980b9;
-        }
-    `;
-    document.head.appendChild(style);
-
-    // Add Product Icon (Green Square Control Panel)
-    const productIcon = document.createElement('div');
-    productIcon.className = 'product-icon';
-    document.body.appendChild(productIcon);
-
-    // Show control panel on click or hover
-    productIcon.addEventListener('click', () => {
-        showControlPanel(productIcon);
-    });
-
-    productIcon.addEventListener('mouseover', () => {
-        showControlPanel(productIcon);
-    });
-
-    function showControlPanel(icon: HTMLElement) {
-        const controlPanel = document.createElement('div');
-        controlPanel.className = 'control-panel';
-        controlPanel.innerHTML = `
-            <div class="control-panel-header">
-                <span>Control Panel</span>
-                <button class="close-control-panel">&times;</button>
-            </div>
-            <div class="control-panel-body">
-                <p>This is the control panel. You can add more controls here.</p>
-            </div>
-        `;
-
-        document.body.appendChild(controlPanel);
-
-        // Position control panel
-        const rect = icon.getBoundingClientRect();
-        controlPanel.style.top = `${rect.bottom + 10}px`;
-        controlPanel.style.left = `${rect.left}px`;
-
-        // Close control panel on button click
-        const closeButton = controlPanel.querySelector('.close-control-panel');
-        closeButton?.addEventListener('click', () => {
-            controlPanel.remove();
-        });
-
-        // Remove control panel when mouse leaves
-        icon.addEventListener('mouseleave', () => {
-            controlPanel.style.opacity = '0';
-            setTimeout(() => controlPanel.remove(), 300); // Fade-out animation
-        });
-    }
+    injectStyles();
+    injectProductIcon();
 }, 2000);
