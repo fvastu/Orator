@@ -11,4 +11,16 @@ const UNDERLINE_COLORS: Record<Severity, string> = {
  * @param severity - The severity level ('error', 'warning', 'correction')
  * @returns The corresponding color code as a string
  */
-const getUnderlineColor = (severity: Severity): string => UNDERLINE_COLORS[severity];
+export const getUnderlineColor = (severity: Severity): string => UNDERLINE_COLORS[severity];
+
+export function getTextNodesInEditor(element: Element): Node[] {
+    let textNodes: Node[] = [];
+    const walk = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+
+    let node;
+    while ((node = walk.nextNode())) {
+        textNodes.push(node);
+    }
+
+    return textNodes;
+}

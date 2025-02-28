@@ -1,74 +1,100 @@
+import engine from '../ai/engine';
 import { replaceSelectedText } from './text-correction-utils';
+import { getOverlayContainer, injectStyles } from './inject-styles';
+import { getTextNodesInEditor, getUnderlineColor } from './ui-utils';
+import { showTooltip } from './tooltip';
+import { injectProductIcon } from './product-icon';
+import { debounce } from './ts-utilts';
+// Load wink-nlp package.
+import winkNLP from 'wink-nlp';
+// Load english language model.
+import model from 'wink-eng-lite-web-model';
 
 type Severity = 'error' | 'warning';
 type ErrorRange = { start: number; end: number; severity: Severity };
 
 const INPUT_SELECTOR = "textarea, input[type='text'], [contenteditable]";
 
-const injectProductIcon = () => {
-    // Add Product Icon (Green Square Control Panel)
-    const productIcon = document.createElement('div');
-    productIcon.className = 'product-icon';
-    document.body.appendChild(productIcon);
+const INPUT_DEBOUNCE_TIME = 1000;
 
-    // Show control panel on click or hover
-    productIcon.addEventListener('click', () => {
-        showControlPanel(productIcon);
-    });
-
-    productIcon.addEventListener('mouseover', () => {
-        showControlPanel(productIcon);
-    });
-
-    function showControlPanel(icon: HTMLElement) {
-        const controlPanel = document.createElement('div');
-        controlPanel.className = 'control-panel';
-        controlPanel.innerHTML = `
-            <div class="control-panel-header">
-                <span>Control Panel</span>
-                <button class="close-control-panel">&times;</button>
-            </div>
-            <div class="control-panel-body">
-                <p>This is the control panel. You can add more controls here.</p>
-            </div>
-        `;
-
-        document.body.appendChild(controlPanel);
-
-        // Position control panel
-        const rect = icon.getBoundingClientRect();
-        controlPanel.style.top = `${rect.bottom + 10}px`;
-        controlPanel.style.left = `${rect.left}px`;
-
-        // Close control panel on button click
-        const closeButton = controlPanel.querySelector('.close-control-panel');
-        closeButton?.addEventListener('click', () => {
-            controlPanel.remove();
-        });
-
-        // Remove control panel when mouse leaves
-        icon.addEventListener('mouseleave', () => {
-            controlPanel.style.opacity = '0';
-            setTimeout(() => controlPanel.remove(), 300); // Fade-out animation
-        });
-    }
-};
+// Data structure to keep track of words and sentences that have been processed
+const processedItems = new Set<string>();
 
 // Function to send text to the background script for correction
-async function sendTextForCorrection(text: string): Promise<ErrorRange[]> {
-    return Promise.resolve([]);
+async function analyzeText(text: string) {
+    const isInitialized = await engine.init();
+    if (!isInitialized || !text) return Promise.resolve([]);
+
+    const wordResults = await analyzeWords(text);
+    const sentenceResults = await analyzeSentences(text);
+
+    return [...wordResults, ...sentenceResults];
 }
 
-setTimeout(async () => {
+// Function to analyze individual words
+async function analyzeWords(text: string) {
+    const nlp = winkNLP(model);
+    const doc = nlp.readDoc(text);
+    const words = doc.tokens().out();
+
+    const results = [];
+    for (const word of words) {
+        console.log('analyzing word', word);
+        if (!processedItems.has(word)) {
+            console.log('Not found in the cache, analyzing word');
+            const grammarResult = await engine.analyzeGrammar(word);
+            const styleResult = await engine.analyzeStyle(word);
+            const syntaxResult = await engine.analyzeSyntax(word);
+            console.log({ grammarResult, styleResult, syntaxResult });
+            processedItems.add(word); // Mark this word as processed
+            console.log({ word, grammarResult });
+            // Collect and return the analysis result for the word
+            results.push({
+                word,
+                analysis: grammarResult,
+            });
+        }
+    }
+    return results;
+}
+
+// Function to analyze individual sentences
+async function analyzeSentences(text: string) {
+    const nlp = winkNLP(model);
+    const doc = nlp.readDoc(text);
+    const sentences = doc.sentences().out();
+
+    const results = [];
+    for (const sentence of sentences) {
+        console.log('analyzing sentence', sentence);
+        if (!processedItems.has(sentence)) {
+            console.log('Not found in the cache, analyzing sentence');
+            const analysisResult = await engine.analyzeStyle(sentence);
+            processedItems.add(sentence); // Mark this sentence as processed
+            console.log({ sentence, analysisResult });
+            results.push({
+                sentence,
+                analysis: analysisResult,
+            });
+        }
+    }
+    return results;
+}
+
+const start = () => {
+    injectStyles();
+    injectProductIcon();
     const overlay = getOverlayContainer();
     const inputs = document.querySelectorAll(INPUT_SELECTOR);
 
     inputs.forEach((input) => {
-        ['input', 'blur'].forEach(async (_event) => {
-            const text = input.textContent || (input as HTMLInputElement).value || '';
-            const errors = await sendTextForCorrection(text);
-            highlightErrors(errors);
-        });
+        const handleInput = debounce(async (input: HTMLElement) => {
+            const text = input instanceof HTMLInputElement ? input.value : input.textContent;
+            const errors = await analyzeText(text || '');
+            highlightErrors(errors as any);
+        }, INPUT_DEBOUNCE_TIME);
+
+        input.addEventListener('input', () => handleInput(input));
     });
 
     // Highlight errors with severity
@@ -124,7 +150,8 @@ setTimeout(async () => {
                                       )}" is an incorrect spelling of "corrected-word".`
                                     : `"${node.textContent?.slice(nodeStart, nodeEnd)}" might need review.`,
                                 severity === 'error' ? 'corrected-word' : 'alternative-word',
-                                range // Pass the range to the tooltip
+                                range, // Pass the range to the tooltip,
+                                replaceSelectedText
                             );
                         });
                     });
@@ -134,66 +161,6 @@ setTimeout(async () => {
             });
         });
     }
+};
 
-    function getTextNodesInEditor(element: Element): Node[] {
-        let textNodes: Node[] = [];
-        const walk = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
-
-        let node;
-        while ((node = walk.nextNode())) {
-            textNodes.push(node);
-        }
-
-        return textNodes;
-    }
-
-    // Show tooltip when clicked
-    function showTooltip(
-        highlightBox: HTMLElement,
-        errorType: string,
-        explanation: string,
-        suggestion: string,
-        range: Range
-    ) {
-        const tooltip = document.createElement('div');
-        tooltip.className = 'popup';
-        tooltip.innerHTML = `
-            <div class="popup-header">
-                <span class="error-type">${errorType}</span>
-                <button class="close-btn">&times;</button>
-            </div>
-            <p class="explanation">${explanation}</p>
-            <div class="suggestion">
-                <span class="suggestion-label">Suggestion:</span>
-                <button class="suggestion-btn">${suggestion}</button>
-            </div>
-        `;
-
-        document.body.appendChild(tooltip);
-
-        // Position tooltip
-        const rect = highlightBox.getBoundingClientRect();
-        tooltip.style.top = `${rect.top - tooltip.offsetHeight - 10}px`;
-        tooltip.style.left = `${rect.left}px`;
-
-        // Close tooltip on button click
-        const closeButton = tooltip.querySelector('.close-btn');
-        closeButton?.addEventListener('click', () => {
-            tooltip.remove();
-        });
-
-        // Replace selected text with suggestion when the suggestion button is clicked
-        const suggestionButton = tooltip.querySelector('.suggestion-btn');
-        suggestionButton?.addEventListener('click', () => {
-            replaceSelectedText(range, suggestion);
-            tooltip.remove(); // Close the tooltip after replacing the text
-        });
-
-        // Show tooltip
-        tooltip.style.opacity = '1';
-        tooltip.style.visibility = 'visible';
-    }
-
-    injectStyles();
-    injectProductIcon();
-}, 2000);
+setTimeout(start, 2000);

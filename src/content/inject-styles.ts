@@ -1,4 +1,4 @@
-const injectStyles = () => {
+export const injectStyles = () => {
     // Add styles for animation and tooltips
     const style = document.createElement('style');
     style.innerHTML = `
@@ -97,7 +97,7 @@ const injectStyles = () => {
     document.head.appendChild(style);
 };
 
-const getOverlayContainer = () => {
+export const getOverlayContainer = () => {
     let overlay = document.getElementById('overlay');
     if (!overlay) {
         overlay = document.createElement('div');

@@ -37,6 +37,7 @@
         "fs": "^0.0.1-security",
         "html-webpack-plugin": "^5.5.0",
         "mini-css-extract-plugin": "^2.7.6",
+        "natural": "^8.0.1",
         "onnxruntime-web": "^1.20.1",
         "prop-types": "^15.8.1",
         "spellchecker": "^3.7.1",
@@ -47,7 +48,9 @@
         "webpack": "^5.72.1",
         "webpack-bundle-analyzer": "^4.5.0",
         "webpack-ext-reloader-mv3": "^2.1.1",
-        "webpack-extension-manifest-plugin": "^0.8.0"
+        "webpack-extension-manifest-plugin": "^0.8.0",
+        "wink-eng-lite-web-model": "^1.8.1",
+        "wink-nlp": "^2.3.2"
     },
     "devDependencies": {
         "@types/chrome": "^0.0.188",
